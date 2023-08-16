@@ -29,6 +29,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type ObserverData struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+}
+
 type SignalData struct {
 	Sdp  webrtc.SessionDescription `json:"sdp"`
 	Uuid string                    `json:"uuid"`
@@ -49,7 +54,7 @@ func Decode(in string, obj interface{}) {
 	}
 }
 
-func HTTPSDPServer() chan string {
+func HTTPSDPServer() (chan string, chan string) {
 	port := flag.Int("port", 8443, "http server port")
 	flag.Parse()
 
@@ -69,11 +74,32 @@ func HTTPSDPServer() chan string {
 				break
 			}
 
-			log.Printf("message type: %d, recv: %s", mt, message)
+			log.Printf("signal message type: %d, recv: %s", mt, message)
 			sdpChan <- string(message)
 
-			log.Printf("message type: %d, write: %s", mt, message)
+			log.Printf("signal message type: %d, write: %s", mt, message)
 			c.WriteMessage(mt, []byte(<-sdpChan))
+		}
+	})
+
+	observerChan := make(chan string)
+	http.HandleFunc("/observer", func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Print("upgrade:", err)
+			return
+		}
+		defer c.Close()
+
+		for {
+			mt, message, err := c.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				break
+			}
+
+			log.Printf("observer message type: %d, write: %s", mt, message)
+			c.WriteMessage(mt, []byte(<-observerChan))
 		}
 	})
 
@@ -85,13 +111,13 @@ func HTTPSDPServer() chan string {
 		}
 	}()
 
-	return sdpChan
+	return sdpChan, observerChan
 }
 
 // nolint:gocognit
 func main() {
 	// Everything below is the Pion WebRTC API! Thanks for using it ❤️.
-	sdpChan := HTTPSDPServer()
+	sdpChan, observerChan := HTTPSDPServer()
 
 	// Create a MediaEngine object to configure the supported codec
 	m := &webrtc.MediaEngine{}
@@ -175,6 +201,11 @@ func main() {
 	offerData := SignalData{}
 	Decode(<-sdpChan, &offerData)
 
+	observerChan <- Encode(ObserverData{
+		Type: "sdp",
+		Data: offerData.Sdp,
+	})
+
 	// Set the remote SessionDescription
 	err = peerConnection.SetRemoteDescription(offerData.Sdp)
 	if err != nil {
@@ -237,6 +268,10 @@ func main() {
 	}
 
 	sdpChan <- Encode(answerData)
+	observerChan <- Encode(ObserverData{
+		Type: "sdp",
+		Data: answerData.Sdp,
+	})
 
 	// Block forever
 	select {}
