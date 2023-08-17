@@ -89,8 +89,8 @@ func HTTPSDPServer() (chan string, chan string) {
 			log.Print("upgrade:", err)
 			return
 		}
+		log.Printf("handle observer")
 		defer c.Close()
-
 		for {
 			message := <-observerChan
 			log.Printf("write observer message %s", message)

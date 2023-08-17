@@ -1,19 +1,30 @@
 import styles from '../styles/Home.module.css';
-import {useState} from 'react';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
-  let [message, setMessage] = useState("")
+    let [message, setMessage] = useState("")
 
-  let socket = new WebSocket("ws://localhost:8443/observer")
+    useEffect(() => {
+        let socket = new WebSocket("ws://localhost:8443/observer")
+        let str = "";
+        socket.addEventListener('message', function (event) {
+            message = JSON.parse(event.data);
+            console.log("recv ", message);
+            let type = message["type"];
+            let data = message["data"];
+            if (type == "sdp") {
+                data["sdp"].replaceAll("\\r\\n", "\r\n");
+                str += '\n\n' + data["sdp"];
+            }
+            console.log(str)
+            setMessage(str);
+        });
+    }, []);
 
-  socket.addEventListener('message', function (event) {
-      console.log('Message from server ', event.data);
-      setMessage(event.data);
-  });
-
-  return (
-    <div className={styles.container}>
-      {message}
-    </div>
-  )
+    return (
+        <div className={styles.container}>
+            <textarea value={message} readOnly={true}>
+            </textarea>
+        </div >
+    )
 }
