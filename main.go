@@ -92,14 +92,9 @@ func HTTPSDPServer() (chan string, chan string) {
 		defer c.Close()
 
 		for {
-			mt, message, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				break
-			}
-
-			log.Printf("observer message type: %d, write: %s", mt, message)
-			c.WriteMessage(mt, []byte(<-observerChan))
+			message := <-observerChan
+			log.Printf("write observer message %s", message)
+			c.WriteMessage(websocket.TextMessage, []byte(message))
 		}
 	})
 
