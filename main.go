@@ -77,12 +77,12 @@ func HTTPSDPServer() (chan string, chan string) {
 			log.Printf("signal message type: %d, recv: %s", mt, message)
 			sdpChan <- string(message)
 
-			log.Printf("signal message type: %d, write: %s", mt, message)
+			// log.Printf("signal message type: %d, write: %s", mt, message)
 			c.WriteMessage(mt, []byte(<-sdpChan))
 		}
 	})
 
-	observerChan := make(chan string)
+	observerChan := make(chan string, 2)
 	http.HandleFunc("/observer", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -147,17 +147,14 @@ func main() {
 	}
 	i.Add(intervalPliFactory)
 
+	s := webrtc.SettingEngine{}
+	// s.SetLite(true)
+
 	// Create the API object with the MediaEngine
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i))
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(s), webrtc.WithInterceptorRegistry(i))
 
 	// Prepare the configuration
-	config := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
-			},
-		},
-	}
+	config := webrtc.Configuration{}
 	// Create a new RTCPeerConnection
 	peerConnection, err := api.NewPeerConnection(config)
 	if err != nil {
@@ -245,6 +242,7 @@ func main() {
 	}
 
 	// Create channel that is blocked until ICE Gathering is complete
+
 	gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
 
 	// Sets the LocalDescription, and starts our UDP listeners
@@ -255,6 +253,7 @@ func main() {
 	// Block until ICE Gathering is complete, disabling trickle ICE
 	// we do this because we only can exchange one signaling message
 	// in a production application you should exchange ICE Candidates via OnICECandidate
+
 	<-gatherComplete
 
 	answerData := SignalData{

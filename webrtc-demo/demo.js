@@ -25,6 +25,7 @@ async function onSignalMessage(message) {
   if (!peerConnection) start(false);
 
   let signal = JSON.parse(message.data);
+  console.log(signal.sdp.sdp);
 
   // Ignore messages from ourself
   if (signal.uuid == uuid) return;
@@ -84,6 +85,7 @@ async function start(isCaller) {
     try {
       let offer = await peerConnection.createOffer()
       await peerConnection.setLocalDescription(offer)
+      // serverConnection.send(JSON.stringify({ 'sdp': peerConnection.localDescription, 'uuid': uuid }));
     } catch (err) {
       console.log(err)
     }
