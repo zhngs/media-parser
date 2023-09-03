@@ -20,7 +20,10 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/pkg/intervalpli"
+	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var upgrader = websocket.Upgrader{
@@ -109,6 +112,65 @@ func HTTPSDPServer() (chan string, chan string) {
 	return sdpChan, observerChan
 }
 
+type customLogger struct {
+	logger *zap.Logger
+}
+
+func (c *customLogger) Trace(msg string) { c.logger.Debug(msg, zap.String("pionLevel", "trace")) }
+func (c *customLogger) Tracef(format string, args ...interface{}) {
+	c.logger.Debug(fmt.Sprintf(format, args...), zap.String("pionLevel", "trace"))
+}
+func (c *customLogger) Debug(msg string) { c.logger.Debug(msg) }
+func (c *customLogger) Debugf(format string, args ...interface{}) {
+	c.logger.Debug(fmt.Sprintf(format, args...))
+}
+func (c *customLogger) Info(msg string) { c.logger.Info(msg) }
+func (c *customLogger) Infof(format string, args ...interface{}) {
+	c.logger.Info(fmt.Sprintf(format, args...))
+}
+func (c *customLogger) Warn(msg string) { c.logger.Warn(msg) }
+func (c *customLogger) Warnf(format string, args ...interface{}) {
+	c.logger.Warn(fmt.Sprintf(format, args...))
+}
+func (c *customLogger) Error(msg string) { c.logger.Error(msg) }
+func (c *customLogger) Errorf(format string, args ...interface{}) {
+	c.logger.Error(fmt.Sprintf(format, args...))
+}
+
+type customLoggerFactory struct{}
+
+func (c customLoggerFactory) NewLogger(subsystem string) logging.LeveledLogger {
+	cfg := zap.Config{
+		Level:             zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		Development:       true,
+		DisableCaller:     false,
+		DisableStacktrace: false,
+		Encoding:          "console",
+		EncoderConfig: zapcore.EncoderConfig{
+			TimeKey:        "T",
+			LevelKey:       "L",
+			NameKey:        "N",
+			CallerKey:      "C",
+			FunctionKey:    zapcore.OmitKey,
+			MessageKey:     "M",
+			StacktraceKey:  "S",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseColorLevelEncoder,
+			EncodeTime:     zapcore.RFC3339NanoTimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.FullCallerEncoder,
+		},
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+	logger := zap.Must(cfg.Build())
+	logger = logger.WithOptions(zap.AddCallerSkip(1))
+	// defer logger.Sync()
+	return &customLogger{
+		logger: logger,
+	}
+}
+
 // nolint:gocognit
 func main() {
 	// Everything below is the Pion WebRTC API! Thanks for using it ❤️.
@@ -147,8 +209,11 @@ func main() {
 	}
 	i.Add(intervalPliFactory)
 
-	s := webrtc.SettingEngine{}
-	// s.SetLite(true)
+	s := webrtc.SettingEngine{
+		LoggerFactory: customLoggerFactory{},
+	}
+	s.SetEphemeralUDPPortRange(9000, 9000)
+	s.SetLite(true)
 
 	// Create the API object with the MediaEngine
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(s), webrtc.WithInterceptorRegistry(i))

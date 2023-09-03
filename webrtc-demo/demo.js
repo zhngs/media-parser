@@ -7,10 +7,10 @@ let serverConnection;
 
 // 一般使用这个配置
 let peerConnectionConfig = {
-  'iceServers': [
-    { 'urls': 'stun:stun.stunprotocol.org:3478' },
-    { 'urls': 'stun:stun.l.google.com:19302' },
-  ]
+  // 'iceServers': [
+  //   { 'urls': 'stun:stun.stunprotocol.org:3478' },
+  //   { 'urls': 'stun:stun.l.google.com:19302' },
+  // ]
 };
 
 // 用于测试turn服务器
@@ -69,7 +69,7 @@ async function start(isCaller) {
   peerConnection.onicecandidate = event => {
     console.log(event.candidate)
     if (event.candidate === null) {
-      console.log(peerConnection.localDescription)
+      console.log(peerConnection.localDescription.sdp)
       serverConnection.send(JSON.stringify({ 'sdp': peerConnection.localDescription, 'uuid': uuid }));
     }
   };
