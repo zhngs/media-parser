@@ -15,11 +15,13 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/pkg/intervalpli"
+	"github.com/pion/interceptor/pkg/stats"
 	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 	"go.uber.org/zap"
@@ -209,11 +211,22 @@ func main() {
 	}
 	i.Add(intervalPliFactory)
 
+	statsInterceptorFactory, err := stats.NewInterceptor()
+	if err != nil {
+		panic(err)
+	}
+	var statsGetter stats.Getter
+	statsInterceptorFactory.OnNewPeerConnection(func(_ string, g stats.Getter) {
+		statsGetter = g
+	})
+	i.Add(statsInterceptorFactory)
+
 	s := webrtc.SettingEngine{
 		LoggerFactory: customLoggerFactory{},
 	}
 	s.SetEphemeralUDPPortRange(9000, 9000)
-	s.SetLite(true)
+	// s.SetLite(true)
+	// s.SetNAT1To1IPs([]string{"127.0.0.1"}, webrtc.ICECandidateTypeHost)
 
 	// Create the API object with the MediaEngine
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(s), webrtc.WithInterceptorRegistry(i))
@@ -273,6 +286,18 @@ func main() {
 	// replaces the SSRC and sends them back
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), track.Codec().MimeType)
+
+		go func() {
+			for {
+				stats := statsGetter.Get(uint32(track.SSRC()))
+
+				fmt.Printf("Stats for: %s\n", track.Codec().MimeType)
+				fmt.Println(stats)
+
+				time.Sleep(time.Second * 5)
+			}
+		}()
+
 		for {
 			// Read RTP packets being sent to Pion
 			rtp, _, readErr := track.ReadRTP()
